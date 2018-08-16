@@ -347,8 +347,8 @@ static int const RCTVideoUnset = -1;
 }
 
 - (NSURL*) urlFilePath:(NSString*) filepath {
-  if ([filepath containsString:@"file://"]) {
-    return [NSURL URLWithString:filepath];
+  if ([filepath containsString:@"file://"] && ![filepath containsString:@"/Documents/"]) { 
+	return [NSURL URLWithString:filepath];
   }
   
   // code to support local caching
