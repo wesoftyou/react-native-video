@@ -6,14 +6,6 @@
 
 @implementation RCTVideoPlayerViewController
 
-- (id)init {
-  self = [super init];
-  if (self) {
-    self.autorotate = true; // autorotate should be true by default
-  }
-  return self;
-}
-
 - (void)viewDidDisappear:(BOOL)animated
 {
   [super viewDidDisappear:animated];
@@ -21,10 +13,7 @@
   [_rctDelegate videoPlayerViewControllerDidDismiss:self];
 }
 
-- (BOOL)shouldAutorotate {
-  return self.autorotate;
-}
-
+#if !TARGET_OS_TV
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations {
   
   if ([self.preferredOrientation.lowercaseString isEqualToString:@"landscape"]) {
@@ -48,5 +37,6 @@
     return orientation;
   }
 }
+#endif
 
 @end

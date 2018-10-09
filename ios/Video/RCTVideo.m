@@ -64,7 +64,6 @@ static int const RCTVideoUnset = -1;
   NSString * _ignoreSilentSwitch;
   NSString * _resizeMode;
   BOOL _fullscreen;
-  BOOL _fullscreenAutorotate;
   NSString * _fullscreenOrientation;
   BOOL _fullscreenPlayerPresented;
   UIViewController * _presentingViewController;
@@ -84,7 +83,6 @@ static int const RCTVideoUnset = -1;
     _rate = 1.0;
     _volume = 1.0;
     _resizeMode = @"AVLayerVideoGravityResizeAspectFill";
-    _fullscreenAutorotate = YES;
     _fullscreenOrientation = @"default";
     _pendingSeek = false;
     _pendingSeekTime = 0.0f;
@@ -128,7 +126,6 @@ static int const RCTVideoUnset = -1;
     RCTVideoPlayerViewController* viewController = [[RCTVideoPlayerViewController alloc] init];
     viewController.showsPlaybackControls = YES;
     viewController.rctDelegate = self;
-    viewController.autorotate = _fullscreenAutorotate;
     viewController.preferredOrientation = _fullscreenOrientation;
     
     viewController.view.frame = self.bounds;
@@ -1151,13 +1148,6 @@ static int const RCTVideoUnset = -1;
     [_presentingViewController dismissViewControllerAnimated:true completion:^{
       [self videoPlayerViewControllerDidDismiss:_playerViewController];
     }];
-  }
-}
-
-- (void)setFullscreenAutorotate:(BOOL)autorotate {
-  _fullscreenAutorotate = autorotate;
-  if (_fullscreenPlayerPresented) {
-    _playerViewController.autorotate = autorotate;
   }
 }
 
