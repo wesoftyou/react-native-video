@@ -348,6 +348,8 @@ static int const RCTVideoUnset = -1;
       }
         
       _player = [AVPlayer playerWithPlayerItem:_playerItem];
+      [_player addObserver:self forKeyPath:@"player.currentItem.status" options:0 context:nil];
+      
       _player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
         
       [_player addObserver:self forKeyPath:playbackRate options:0 context:nil];
@@ -402,6 +404,8 @@ static int const RCTVideoUnset = -1;
     return;
   }
 
+  NSMutableArray *instructions = [NSMutableArray new];
+  
   // sideload text tracks
   AVMutableComposition *mixComposition = [[AVMutableComposition alloc] init];
   
@@ -412,12 +416,19 @@ static int const RCTVideoUnset = -1;
                            atTime:kCMTimeZero
                             error:nil];
   
+  AVMutableVideoCompositionInstruction *videoCompositionInstruction = [AVMutableVideoCompositionInstruction videoCompositionInstruction];
+  videoCompositionInstruction.timeRange = CMTimeRangeMake(kCMTimeZero, videoAsset.timeRange.duration);
+  videoCompositionInstruction.layerInstructions = @[[AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:videoCompTrack]];
+  [instructions addObject:videoCompositionInstruction];
+  
   AVAssetTrack *audioAsset = [asset tracksWithMediaType:AVMediaTypeAudio].firstObject;
   AVMutableCompositionTrack *audioCompTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
   [audioCompTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.timeRange.duration)
                           ofTrack:audioAsset
                            atTime:kCMTimeZero
                             error:nil];
+  
+
   
   NSMutableArray* validTextTracks = [NSMutableArray array];
   for (int i = 0; i < _textTracks.count; ++i) {
@@ -442,8 +453,21 @@ static int const RCTVideoUnset = -1;
   if (validTextTracks.count != _textTracks.count) {
     [self setTextTracks:validTextTracks];
   }
+  
+  CGSize size = CGSizeZero;
+  if (CGSizeEqualToSize(size, CGSizeZero)) {
+    size = videoAsset.naturalSize;;
+  }
+  
+  AVMutableVideoComposition *mutableVideoComposition = [AVMutableVideoComposition videoComposition];
+  mutableVideoComposition.instructions = instructions;
+  mutableVideoComposition.frameDuration = CMTimeMake(1, 30);
+  mutableVideoComposition.renderSize = size;
+  
+  AVPlayerItem* localPlayerItem =[AVPlayerItem playerItemWithAsset:mixComposition];
+  localPlayerItem.videoComposition = mutableVideoComposition;
 
-  handler([AVPlayerItem playerItemWithAsset:mixComposition]);
+  handler(localPlayerItem);
 }
 
 - (void)playerItemForSource:(NSDictionary *)source withCallback:(void(^)(AVPlayerItem *))handler
@@ -549,9 +573,20 @@ static int const RCTVideoUnset = -1;
 
 #endif
 
+BOOL _firstTime = YES;
+
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
 {
-  if (object == _playerItem) {
+  if (object == _player && [keyPath isEqualToString:@"player.currentItem.status"]) {
+    if (_player.status == AVPlayerStatusReadyToPlay && _firstTime) {
+      _firstTime = NO;
+      [_player setRate:_rate];
+      [_player play];
+    } else if (_player.status == AVPlayerStatusFailed) {
+      // something went wrong. player.error should contain some information
+    }
+  }
+  else if (object == _playerItem) {
     // When timeMetadata is read the event onTimedMetadata is triggered
     if ([keyPath isEqualToString:timedMetadata]) {
       NSArray<AVMetadataItem *> *items = [change objectForKey:@"new"];
@@ -764,8 +799,8 @@ static int const RCTVideoUnset = -1;
     } else if([_ignoreSilentSwitch isEqualToString:@"obey"]) {
       [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryAmbient error:nil];
     }
-    [_player play];
-    [_player setRate:_rate];
+//    [_player play];
+//    [_player setRate:_rate];
   }
   
   _paused = paused;
