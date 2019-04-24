@@ -36,6 +36,7 @@ export default class VideoPlayer extends Component {
         source={require('./broadchurch.mp4')}
         style={{width: this.state.orientationWidth, height: this.state.orientationHeight }}
         controls={true}
+        onLoad={() => this.videoPlayer && this.videoPlayer.presentFullscreenPlayer()}
       />
       <Button title="full screen" onPress={ this.onPress.bind(this) }></Button>
     </View>
