@@ -10,7 +10,7 @@
 
 @implementation AVPlayerViewController (Fullscreen)
 
--(void)goFullscreen {
+-(void)goFullscreenWithCompletionHandler:(void (^)(void)) completionBlock {
   NSString *selectorForFullscreen = @"transitionToFullScreenViewControllerAnimated:completionHandler:";
   if (@available(iOS 11.3, *)) {
     selectorForFullscreen = @"transitionToFullScreenAnimated:interactive:completionHandler:";
@@ -34,7 +34,6 @@
       index++;
     }
     
-    id completionBlock = nil;
     [inv setArgument:&(completionBlock) atIndex:index];
     [inv invoke];
   }

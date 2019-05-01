@@ -587,8 +587,29 @@ static int const RCTVideoUnset = -1;
       
       if (!CGRectEqualToRect(oldRect, newRect)) {
         if (CGRectEqualToRect(newRect, [UIScreen mainScreen].bounds)) {
-          NSLog(@"in fullscreen");
-        } else NSLog(@"not fullscreen");
+          NSLog(@"log: in fullscreen");
+          
+          if (!_fullscreenPlayerPresented) {
+            if(self.onVideoFullscreenPlayerDidPresent) {
+              self.onVideoFullscreenPlayerDidPresent(@{@"target": self.reactTag});
+            }
+          }
+          _fullscreenPlayerPresented = true;
+        } else {
+          NSLog(@"log: not fullscreen");
+          
+          if (_fullscreenPlayerPresented) {
+            if(self.onVideoFullscreenPlayerDidDismiss) {
+              self.onVideoFullscreenPlayerWillDismiss(@{@"target": self.reactTag});
+            }
+            if(self.onVideoFullscreenPlayerDidDismiss) {
+              self.onVideoFullscreenPlayerDidDismiss(@{@"target": self.reactTag});
+            }
+          }
+          
+          _fullscreenPlayerPresented = false;
+
+        }
         
         [self.reactViewController.view setFrame:[UIScreen mainScreen].bounds];
         [self.reactViewController.view setNeedsLayout];
@@ -1246,9 +1267,25 @@ static int const RCTVideoUnset = -1;
       if(self.onVideoFullscreenPlayerWillPresent) {
         self.onVideoFullscreenPlayerWillPresent(@{@"target": self.reactTag});
       }
-      [_playerViewController removeFromParentViewController];
       
-      [_playerViewController goFullscreen];
+      if (_controls) {
+      
+        [_playerViewController removeFromParentViewController];
+        [_playerViewController goFullscreenWithCompletionHandler:^{
+          
+          _playerViewController.showsPlaybackControls = YES;
+          _playerViewController.autorotate = _fullscreenAutorotate;
+        }];
+      } else {
+        [viewController presentViewController:_playerViewController animated:true completion:^{
+          _playerViewController.showsPlaybackControls = YES;
+          _fullscreenPlayerPresented = fullscreen;
+          _playerViewController.autorotate = _fullscreenAutorotate;
+          if(self.onVideoFullscreenPlayerDidPresent) {
+            self.onVideoFullscreenPlayerDidPresent(@{@"target": self.reactTag});
+          }
+        }];
+      }
     }
   }
   else if ( !fullscreen && _fullscreenPlayerPresented )

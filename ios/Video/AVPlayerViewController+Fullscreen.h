@@ -13,7 +13,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface AVPlayerViewController (Fullscreen)
 
--(void)goFullscreen;
+-(void)goFullscreenWithCompletionHandler:(void (^)(void)) completionBlock;
 
 @end
 
