@@ -1057,6 +1057,7 @@ Callback function that is called every progressUpdateInterval seconds with info 
 Property | Type | Description
 --- | --- | ---
 currentTime | number | Current position in seconds
+fullCurrentTime | number | Relative position to start of the playback. So not relative to first manifest chunk as currentTime. (Only on Android ExoPlayer)
 playableDuration | number | Position to where the media can be played to using just the buffer in seconds
 seekableDuration | number | Position to where the media can be seeked to in seconds. Typically, the total length of the media
 

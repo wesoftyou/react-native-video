@@ -119,8 +119,9 @@ class ReactExoplayerView extends FrameLayout implements
     private final VideoEventEmitter eventEmitter;
     private PlayerControlView playerControlView;
     private View playPauseControlContainer;
-    private Player.EventListener eventListener;
-    
+    private Player.EventListener stateEventListener;
+    private Player.EventListener seekEventListener;
+
     private Handler mainHandler;
     private ExoPlayerView exoPlayerView;
 
@@ -128,8 +129,10 @@ class ReactExoplayerView extends FrameLayout implements
     private SimpleExoPlayer player;
     private DefaultTrackSelector trackSelector;
     private boolean playerNeedsSource;
+    private Timeline.Period period;
 
     private int resumeWindow;
+    private long positionThreshold = 0;
     private long resumePosition;
     private boolean loadVideoStarted;
     private boolean isFullscreen;
@@ -186,8 +189,16 @@ class ReactExoplayerView extends FrameLayout implements
                             && player.getPlayWhenReady()
                             ) {
                         long pos = player.getCurrentPosition();
+                        long fullPos = pos;
                         long bufferedDuration = player.getBufferedPercentage() * player.getDuration() / 100;
-                        eventEmitter.progressChanged(pos, bufferedDuration, player.getDuration());
+
+                        Timeline currentTimeline = player.getCurrentTimeline();
+                        if (!currentTimeline.isEmpty()) {
+                            fullPos -= currentTimeline.getPeriod(player.getCurrentPeriodIndex(), period)
+                                    .getPositionInWindowMs() - positionThreshold;
+                        }
+
+                        eventEmitter.progressChanged(pos, fullPos, bufferedDuration, player.getDuration());
                         msg = obtainMessage(SHOW_PROGRESS);
                         sendMessageDelayed(msg, Math.round(mProgressUpdateInterval));
                     }
@@ -208,7 +219,6 @@ class ReactExoplayerView extends FrameLayout implements
         themedReactContext.addLifecycleEventListener(this);
         audioBecomingNoisyReceiver = new AudioBecomingNoisyReceiver(themedReactContext);
     }
-
 
     @Override
     public void setId(int id) {
@@ -321,15 +331,28 @@ class ReactExoplayerView extends FrameLayout implements
         });
 
         // Invoking onPlayerStateChanged event for Player
-        eventListener = new Player.EventListener() {
+        stateEventListener = new Player.EventListener() {
             @Override
             public void onPlayerStateChanged(boolean playWhenReady, int playbackState) {
                 reLayout(playPauseControlContainer);
                 //Remove this eventListener once its executed. since UI will work fine once after the reLayout is done
-                player.removeListener(eventListener);
+                player.removeListener(stateEventListener);
             }
         };
-        player.addListener(eventListener);
+
+        // Invoking onPlayerStateChanged event for Player
+        seekEventListener = new Player.EventListener() {
+            @Override
+            public void onSeekProcessed() {
+                Timeline currentTimeline = player.getCurrentTimeline();
+                if (!currentTimeline.isEmpty()) {
+                   positionThreshold = currentTimeline.getPeriod(player.getCurrentPeriodIndex(), period)
+                            .getPositionInWindowMs();
+                }
+            }
+        };
+        player.addListener(stateEventListener);
+        player.addListener(seekEventListener);
     }
 
     /**
@@ -433,6 +456,7 @@ class ReactExoplayerView extends FrameLayout implements
                     BANDWIDTH_METER.addEventListener(new Handler(), self);
                     setPlayWhenReady(!isPaused);
                     playerNeedsSource = true;
+                    positionThreshold = 0;
 
                     PlaybackParameters params = new PlaybackParameters(rate, 1f);
                     player.setPlaybackParameters(params);
@@ -466,6 +490,7 @@ class ReactExoplayerView extends FrameLayout implements
                 initializePlayerControl();
                 setControls(controls);
                 applyModifiers();
+                period = new Timeline.Period();
             }
         }, 1);
     }
@@ -551,6 +576,7 @@ class ReactExoplayerView extends FrameLayout implements
         if (player != null) {
             updateResumePosition();
             player.release();
+            player.removeListener(seekEventListener);
             player.removeMetadataOutput(this);
             trackSelector = null;
             player = null;
