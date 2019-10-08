@@ -84,6 +84,12 @@ public final class ExoPlayerView extends FrameLayout {
         addViewInLayout(layout, 0, aspectRatioParams);
     }
 
+    public void setSubtitleForcedMiddle(final boolean forced) {
+        if (componentListener != null) {
+            componentListener.subtitleForcedMiddle = forced;
+        }        
+    }
+
     private void setVideoView() {
         if (surfaceView instanceof TextureView) {
             player.setVideoTextureView((TextureView) surfaceView);
@@ -202,10 +208,21 @@ public final class ExoPlayerView extends FrameLayout {
     private final class ComponentListener implements SimpleExoPlayer.VideoListener,
             TextRenderer.Output, ExoPlayer.EventListener {
 
+        public boolean subtitleForcedMiddle = false;
+
         // TextRenderer.Output implementation
 
         @Override
         public void onCues(List<Cue> cues) {
+            if (subtitleForcedMiddle) {
+                List<Cue> copyCues = new ArrayList<>();
+                for (Cue cue : cues) {
+                    Cue copyCue = new Cue(cue.text, Layout.Alignment.ALIGN_CENTER, cue.line, cue.lineType, cue.lineAnchor, 0.5f, Cue.ANCHOR_TYPE_MIDDLE, 0.5f, cue.windowColorSet, cue.windowColor);
+                    copyCues.add(copyCue);
+                }
+                subtitleLayout.onCues(copyCues);
+                return;
+            }
             subtitleLayout.onCues(cues);
         }
 

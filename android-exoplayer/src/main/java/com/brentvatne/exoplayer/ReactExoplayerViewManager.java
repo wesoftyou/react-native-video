@@ -72,6 +72,7 @@ public class ReactExoplayerViewManager extends ViewGroupManager<ReactExoplayerVi
     private static final String PROP_SELECTED_VIDEO_TRACK_VALUE = "value";
     private static final String PROP_HIDE_SHUTTER_VIEW = "hideShutterView";
     private static final String PROP_CONTROLS = "controls";
+    private static final String PROP_SUBTITLES_FORCED_MIDDLE = "subtitlesForcedMiddle";
 
     private ReactExoplayerView reactExoplayerInstance;
 
@@ -337,6 +338,11 @@ public class ReactExoplayerViewManager extends ViewGroupManager<ReactExoplayerVi
                     ? bufferConfig.getInt(PROP_BUFFER_CONFIG_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS) : bufferForPlaybackAfterRebufferMs;
             videoView.setBufferConfig(minBufferMs, maxBufferMs, bufferForPlaybackMs, bufferForPlaybackAfterRebufferMs);
         }
+    }
+
+    @ReactProp(name = PROP_SUBTITLES_FORCED_MIDDLE)
+    public void setSubtitleForcedMiddle(final ReactExoplayerView videoView, final boolean forced) {
+        videoView.setSubtitleForcedMiddle(forced);
     }
 
     private boolean startsWithValidScheme(String uriString) {

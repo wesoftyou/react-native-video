@@ -1351,6 +1351,12 @@ class ReactExoplayerView extends FrameLayout implements
         }
     }
 
+    public void setSubtitleForcedMiddle(final boolean forced) {
+        if (exoPlayerView != null) {
+            exoPlayerView.setSubtitleForcedMiddle(forced);
+        }        
+    }
+
     public void save(ReadableMap options, Promise promise) {
         promise.resolve("ok");
     }
