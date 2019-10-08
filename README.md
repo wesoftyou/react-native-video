@@ -800,6 +800,12 @@ Adjust the balance of the left and right audio channels.  Any value between –1
 
 Platforms: Android MediaPlayer
 
+#### subtitlesForcedMiddle
+Forces subtitles to be rendered in the middle.
+* **false** (default)
+* **true**
+Platforms: Android Exoplayer
+
 #### textTracks
 Load one or more "sidecar" text tracks. This takes an array of objects representing each track. Each object should have the format:
 
