@@ -322,6 +322,7 @@ var styles = StyleSheet.create({
 * [selectedAudioTrack](#selectedaudiotrack)
 * [selectedTextTrack](#selectedtexttrack)
 * [selectedVideoTrack](#selectedvideotrack)
+* [showPictureInPictureOnLeave](#showpictureinpictureonleave)
 * [source](#source)
 * [stereoPan](#stereopan)
 * [textTracks](#texttracks)
@@ -570,7 +571,38 @@ Determine whether the media should played as picture in picture.
 * **false (default)** - Don't not play as picture in picture
 * **true** - Play the media as picture in picture
 
-Platforms: iOS
+To use this feature on AndroidExoPlayer, you must:
+* Add following to the AndroidManifest.xml -> MainActivity:
+```
+  android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout"
+  android:resizeableActivity="true"
+  android:supportsPictureInPicture="true"
+```
+* [Enable PIP feature for you app](https://support.google.com/youtube/answer/7552722?co=GENIE.Platform%3DAndroid&hl=en) in your device settings
+* Add following methods to MainActivity:
+```
+    // To let JS knows about PIP mode change. 
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration?) {
+       super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+       val intent = Intent("onPictureInPictureModeChanged")
+       intent.putExtra("isInPictureInPictureMode", isInPictureInPictureMode)
+       this.sendBroadcast(intent)
+    }
+    
+    // To trigger PIP mode by pressing `Home` or `Recent` buttons
+    override fun onUserLeaveHint() {
+       val intent = Intent("onUserLeaveHint")
+       this.sendBroadcast(intent)
+       super.onUserLeaveHint()
+    }
+        
+    // To close and kill the app when closing PIP window.
+    override fun onStop() {
+       super.onStop()
+       finishAndRemoveTask()
+    }
+```
+Platforms: iOS, Android ExoPlayer
 
 #### playInBackground
 Determine whether the media should continue playing while the app is in the background. This allows customers to continue listening to the audio.
@@ -738,6 +770,13 @@ Type | Value | Description
 If a track matching the specified Type (and Value if appropriate) is unavailable, ABR will be used.
 
 Platforms: Android ExoPlayer
+
+#### showPictureInPictureOnLeave
+Determine whether player should enter picture in picture mode while pressing Back or Recent hardware button.
+* **false (default)** - Don't not enter picture in picture on leave
+* **true** - Enter picture in picture on leave
+
+Platforms: Android ExoPlayer (when following [this](#pictureinpicture))
 
 #### source
 Sets the media source. You can pass an asset loaded via require or an object with a uri.
@@ -1072,7 +1111,7 @@ isActive: true
 }
 ```
 
-Platforms:  iOS
+Platforms:  iOS, Android ExoPlayer (when following [this](#pictureinpicture) )
 
 #### onPlaybackRateChange
 Callback function that is called when the rate of playback changes - either paused or starts/resumes.

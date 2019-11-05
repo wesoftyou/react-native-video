@@ -73,6 +73,8 @@ public class ReactExoplayerViewManager extends ViewGroupManager<ReactExoplayerVi
     private static final String PROP_HIDE_SHUTTER_VIEW = "hideShutterView";
     private static final String PROP_CONTROLS = "controls";
     private static final String PROP_SUBTITLES_FORCED_MIDDLE = "subtitlesForcedMiddle";
+    private static final String PROP_PICTURE_IN_PICTURE = "pictureInPicture";
+    private static final String PROP_SHOW_PICTURE_IN_PICTURE_ON_LEAVE = "showPictureInPictureOnLeave";
 
     private ReactExoplayerView reactExoplayerInstance;
 
@@ -343,6 +345,16 @@ public class ReactExoplayerViewManager extends ViewGroupManager<ReactExoplayerVi
     @ReactProp(name = PROP_SUBTITLES_FORCED_MIDDLE)
     public void setSubtitleForcedMiddle(final ReactExoplayerView videoView, final boolean forced) {
         videoView.setSubtitleForcedMiddle(forced);
+    }
+
+    @ReactProp(name = PROP_PICTURE_IN_PICTURE, defaultBoolean = false)
+    public void setPictureInPicture(final ReactExoplayerView videoView, final boolean pictureInPicture) {
+        videoView.setPictureInPicture(pictureInPicture);
+    }
+
+    @ReactProp(name = PROP_SHOW_PICTURE_IN_PICTURE_ON_LEAVE, defaultBoolean = false)
+    public void setShowPictureInPictureOnLeave(final ReactExoplayerView videoView, final boolean showPictureInPictureOnLeave) {
+        videoView.setShowPictureInPictureOnLeave(showPictureInPictureOnLeave);
     }
 
     private boolean startsWithValidScheme(String uriString) {
