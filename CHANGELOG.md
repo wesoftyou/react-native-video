@@ -3,7 +3,16 @@
 ### next
 * Basic support for DRM on iOS and Android [#1445](https://github.com/react-native-community/react-native-video/pull/1445)
 * Upgrade ExoPlayer to from 2.9.3 to 2.10.3
+* Added media session for Android ExoPlayer allowing user to pause/play playback with headset HW buttons, or for example display player controls in PIP window. [#1780](https://github.com/react-native-community/react-native-video/pull/1780)
 
+### Version 5.0.2
+* Fix crash when RCTVideo's superclass doesn't observe the keyPath 'frame' (iOS) [#1720](https://github.com/react-native-community/react-native-video/pull/1720)
+
+### Version 5.1.0-alpha1
+* Fixed Exoplayer doesn't work with mute=true (Android). [#1696](https://github.com/react-native-community/react-native-video/pull/1696)
+* Added support for automaticallyWaitsToMinimizeStalling property (iOS) [#1723](https://github.com/react-native-community/react-native-video/pull/1723)
+* Bump Exoplayer to 2.10.4, remove deprecated usages of Exoplayer methods (Android). [#1753](https://github.com/react-native-community/react-native-video/pull/1753)
+* Preserve Exoplayer BandwidthMeter instance across video plays, this should noticeably improve streaming bandwidth detection (Android).
 ### Version 5.0.1
 * Fix AndroidX Support bad merge
 

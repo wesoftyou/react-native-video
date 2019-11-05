@@ -1,5 +1,7 @@
 package com.brentvatne.react;
 
+import com.brentvatne.exoplayer.DefaultReactExoplayerConfig;
+import com.brentvatne.exoplayer.ReactExoplayerConfig;
 import com.brentvatne.exoplayer.ReactExoplayerViewManager;
 import com.brentvatne.exoplayer.ReactExoplayerModule;
 import com.facebook.react.ReactPackage;
@@ -27,10 +29,10 @@ public class ReactVideoPackage implements ReactPackage {
 
     }
 
-    // Deprecated RN 0.47	
-    public List<Class<? extends JavaScriptModule>> createJSModules() {	
-        return Collections.emptyList();	
-    }	
+    // Deprecated RN 0.47
+    public List<Class<? extends JavaScriptModule>> createJSModules() {
+        return Collections.emptyList();
+    }
 
 
     @Override

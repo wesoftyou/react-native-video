@@ -59,6 +59,12 @@ Then follow the instructions for your platform to link react-native-video into y
 
 #### Standard Method
 
+**React Native 0.60 and above**
+
+Run `pod install` in the `ios` directory. Linking is not required in React Native 0.60 and above.
+
+**React Native 0.59 and below**
+
 Run `react-native link react-native-video` to link the react-native-video library.
 
 #### Using CocoaPods (required to enable caching)
@@ -71,7 +77,7 @@ Video only:
 
 ```diff
   pod 'Folly', :podspec => '../node_modules/react-native/third-party-podspecs/Folly.podspec'
-+  `pod 'react-native-video', :path => '../node_modules/react-native-video/react-native-video.podspec'`
++  `pod 'react-native-video', :podspec => '../node_modules/react-native-video/react-native-video.podspec'`
 end
 ```
 
@@ -79,7 +85,7 @@ Video with caching ([more info](docs/caching.md)):
 
 ```diff
   pod 'Folly', :podspec => '../node_modules/react-native/third-party-podspecs/Folly.podspec'
-+  `pod 'react-native-video/VideoCaching', :path => '../node_modules/react-native-video/react-native-video.podspec'`
++  `pod 'react-native-video/VideoCaching', :podspec => '../node_modules/react-native-video/react-native-video.podspec'`
 end
 ```
 
@@ -88,7 +94,7 @@ end
 ### tvOS installation
   <details>
   <summary>tvOS details</summary>
-  
+
 `react-native link react-native-video` doesn’t work properly with the tvOS target so we need to add the library manually.
 
 First select your project in Xcode.
@@ -286,8 +292,10 @@ var styles = StyleSheet.create({
 ### Configurable props
 * [allowsExternalPlayback](#allowsexternalplayback)
 * [audioOnly](#audioonly)
+* [automaticallyWaitsToMinimizeStalling](#automaticallyWaitsToMinimizeStalling)
 * [bufferConfig](#bufferconfig)
 * [controls](#controls)
+* [disableFocus](#disableFocus)
 * [filter](#filter)
 * [filterEnabled](#filterEnabled)
 * [fullscreen](#fullscreen)
@@ -324,6 +332,7 @@ var styles = StyleSheet.create({
 * [onAudioBecomingNoisy](#onaudiobecomingnoisy)
 * [onBandwidthUpdate](#onbandwidthupdate)
 * [onEnd](#onend)
+* [onExternalPauseToggled](#onexternalpausetoggled)
 * [onExternalPlaybackChange](#onexternalplaybackchange)
 * [onFullscreenPlayerWillPresent](#onfullscreenplayerwillpresent)
 * [onFullscreenPlayerDidPresent](#onfullscreenplayerdidpresent)
@@ -363,6 +372,13 @@ Indicates whether the player should only play the audio track and instead of dis
 For this to work, the poster prop must be set.
 
 Platforms: all
+
+#### automaticallyWaitsToMinimizeStalling
+A Boolean value that indicates whether the player should automatically delay playback in order to minimize stalling. For clients linked against iOS 10.0 and later
+* **false** - Immediately starts playback
+* **true (default)** - Delays playback in order to minimize stalling
+
+Platforms: iOS
 
 #### bufferConfig
 Adjust the buffer settings. This prop takes an object with one or more of the properties listed below.
@@ -902,6 +918,24 @@ Payload: none
 
 Platforms: all
 
+#### onExternalPauseToggled
+Callback function that is called when external playback pause/play mode is toggled. This can happen when using headset HW buttons for example. Or PIP window buttons. Can be used to toggle paused state to change play/pause button for example.
+
+Payload:
+
+Property | Type | Description
+--- | --- | ---
+isPlaying | boolean | Boolean indicating whether player is playing.
+
+Example:
+```
+{
+  isPlaying: true
+}
+```
+
+Platforms: Android ExoPlayer
+
 #### onExternalPlaybackChange
 Callback function that is called when external playback mode for current playing video has changed. Mostly useful when connecting/disconnecting to Apple TV – it's called on connection/disconnection.
 
@@ -1176,7 +1210,7 @@ Save video to your Photos with current filter prop. Returns promise.
 
 Example:
 ```
-let response = await this.save();
+let response = await this.player.save();
 let path = response.uri;
 ```
 
@@ -1188,12 +1222,12 @@ Notes:
  - Works with cached videos as well. (Checkout video-caching example)
  - If the video is has not began buffering (e.g. there is no internet connection) then the save function will throw an error.
  - If the video is buffering then the save function promise will return after the video has finished buffering and processing.
- 
+
 Future: 
  - Will support multiple qualities through options
  - Will support more formats in the future through options
  - Will support custom directory and file name through options
- 
+
 Platforms: iOS
 
 #### restoreUserInterfaceForPictureInPictureStopCompleted
