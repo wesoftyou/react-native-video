@@ -417,11 +417,16 @@ For Android MediaPlayer, you will need to build your own controls or use a packa
 Platforms: Android ExoPlayer, iOS, react-native-dom
 
 #### disableFocus
+
 Determines whether video audio should override background music/audio in Android devices.
-* ** false (default)** - Override background audio/music
+* **false (default)** - Override background audio/music
 * **true** - Let background audio/music from other apps play
 
 Platforms: Android Exoplayer
+
+#### drm
+
+To setup DRM please follow [this guide](./DRM.md)
 
 #### filter
 Add video filter
@@ -825,6 +830,17 @@ Note: Using this feature adding an entry for NSAppleMusicUsageDescription to you
 
 Platforms: iOS
 
+##### Explicit mimetype for the stream
+
+Provide a member `type` with value (`mpd`/`m3u8`/`ism`) inside the source object.
+Sometimes is needed when URL extension does not match with the mimetype that you are expecting, as seen on the next example. (Extension is .ism -smooth streaming- but file served is on format mpd -mpeg dash-)
+
+Example:
+```
+source={{ uri: 'http://host-serving-a-type-different-than-the-extension.ism/manifest(format=mpd-time-csf)',
+type: 'mpd' }}
+```
+
 ###### Other protocols
 
 The following other types are supported on some platforms, but aren't fully documented yet:
@@ -838,6 +854,12 @@ Adjust the balance of the left and right audio channels.  Any value between –1
 * **1.0** - Full right
 
 Platforms: Android MediaPlayer
+
+#### subtitlesForcedMiddle
+Forces subtitles to be rendered in the middle.
+* **false** (default)
+* **true**
+Platforms: Android Exoplayer
 
 #### textTracks
 Load one or more "sidecar" text tracks. This takes an array of objects representing each track. Each object should have the format:
@@ -1114,6 +1136,7 @@ Callback function that is called every progressUpdateInterval seconds with info 
 Property | Type | Description
 --- | --- | ---
 currentTime | number | Current position in seconds
+fullCurrentTime | number | Relative position to start of the playback. So not relative to first manifest chunk as currentTime. (Only on Android ExoPlayer)
 playableDuration | number | Position to where the media can be played to using just the buffer in seconds
 seekableDuration | number | Position to where the media can be seeked to in seconds. Typically, the total length of the media
 

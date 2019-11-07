@@ -31,6 +31,7 @@ import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.bridge.Promise;
 import com.facebook.react.uimanager.ThemedReactContext;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.DefaultLoadControl;
@@ -40,8 +41,20 @@ import com.google.android.exoplayer2.ExoPlayerFactory;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.PlaybackParameters;
 import com.google.android.exoplayer2.Player;
+import com.google.android.exoplayer2.RenderersFactory;
 import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.google.android.exoplayer2.Timeline;
+import com.google.android.exoplayer2.drm.DefaultDrmSessionEventListener;
+import com.google.android.exoplayer2.drm.DefaultDrmSessionManager;
+import com.google.android.exoplayer2.drm.DrmSessionManager;
+import com.google.android.exoplayer2.drm.FrameworkMediaCrypto;
+import com.google.android.exoplayer2.drm.FrameworkMediaDrm;
+import com.google.android.exoplayer2.drm.HttpMediaDrmCallback;
+import com.google.android.exoplayer2.drm.UnsupportedDrmException;
+import com.google.android.exoplayer2.offline.Download;
+import com.google.android.exoplayer2.offline.DownloadHelper;
+import com.google.android.exoplayer2.offline.DownloadRequest;
+import com.google.android.exoplayer2.upstream.DefaultLoadErrorHandlingPolicy;
 import com.google.android.exoplayer2.mediacodec.MediaCodecRenderer;
 import com.google.android.exoplayer2.mediacodec.MediaCodecUtil;
 import com.google.android.exoplayer2.metadata.Metadata;
@@ -65,10 +78,17 @@ import com.google.android.exoplayer2.trackselection.TrackSelection;
 import com.google.android.exoplayer2.trackselection.TrackSelectionArray;
 import com.google.android.exoplayer2.ui.PlayerControlView;
 import com.google.android.exoplayer2.upstream.BandwidthMeter;
+import com.google.android.exoplayer2.upstream.cache.Cache;
+import com.google.android.exoplayer2.upstream.cache.CacheDataSourceFactory;
 import com.google.android.exoplayer2.upstream.DataSource;
 import com.google.android.exoplayer2.upstream.DefaultAllocator;
 import com.google.android.exoplayer2.upstream.DefaultBandwidthMeter;
+import com.google.android.exoplayer2.upstream.DefaultLoadErrorHandlingPolicy;
+import com.google.android.exoplayer2.upstream.DefaultHttpDataSourceFactory;
+import com.google.android.exoplayer2.upstream.HttpDataSource;
 import com.google.android.exoplayer2.util.Util;
+import com.google.android.exoplayer2.ui.PlayerControlView;
+import com.twentyfouri.media.offline.ExoPlayerDownloadService;
 import com.google.android.exoplayer2.ext.mediasession.MediaSessionConnector;
 
 import java.net.CookieHandler;
@@ -77,15 +97,18 @@ import java.net.CookiePolicy;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 @SuppressLint("ViewConstructor")
+@SuppressWarnings("unchecked")
 class ReactExoplayerView extends FrameLayout implements
         LifecycleEventListener,
         Player.EventListener,
         BandwidthMeter.EventListener,
         BecomingNoisyListener,
         AudioManager.OnAudioFocusChangeListener,
-        MetadataOutput {
+        MetadataOutput,
+        DefaultDrmSessionEventListener {
 
     private static final String TAG = "ReactExoplayerView";
 
@@ -105,16 +128,21 @@ class ReactExoplayerView extends FrameLayout implements
     private final DefaultBandwidthMeter bandwidthMeter;
     private PlayerControlView playerControlView;
     private View playPauseControlContainer;
+    private Player.EventListener stateEventListener;
+    private Player.EventListener seekEventListener;
     private Player.EventListener eventListener;
 
+    private Handler mainHandler;
     private ExoPlayerView exoPlayerView;
 
     private DataSource.Factory mediaDataSourceFactory;
     private SimpleExoPlayer player;
     private DefaultTrackSelector trackSelector;
     private boolean playerNeedsSource;
+    private Timeline.Period period;
 
     private int resumeWindow;
+    private long positionThreshold = 0;
     private long resumePosition;
     private boolean loadVideoStarted;
     private boolean isFullscreen;
@@ -150,8 +178,12 @@ class ReactExoplayerView extends FrameLayout implements
     private boolean playInBackground = false;
     private Map<String, String> requestHeaders;
     private boolean mReportBandwidth = false;
+    private UUID drmUUID = null;
+    private String drmLicenseUrl = null;
+    private String[] drmLicenseHeader = null;
     private boolean controls;
     private boolean showPictureInPictureOnLeave;
+    private boolean offline;
     // \ End props
 
     // React
@@ -169,8 +201,16 @@ class ReactExoplayerView extends FrameLayout implements
                             && player.getPlayWhenReady()
                             ) {
                         long pos = player.getCurrentPosition();
+                        long fullPos = pos;
                         long bufferedDuration = player.getBufferedPercentage() * player.getDuration() / 100;
-                        eventEmitter.progressChanged(pos, bufferedDuration, player.getDuration());
+
+                        Timeline currentTimeline = player.getCurrentTimeline();
+                        if (!currentTimeline.isEmpty()) {
+                            fullPos -= currentTimeline.getPeriod(player.getCurrentPeriodIndex(), period)
+                                    .getPositionInWindowMs() - positionThreshold;
+                        }
+
+                        eventEmitter.progressChanged(pos, fullPos, bufferedDuration, player.getDuration());
                         msg = obtainMessage(SHOW_PROGRESS);
                         sendMessageDelayed(msg, Math.round(mProgressUpdateInterval));
                     }
@@ -214,10 +254,8 @@ class ReactExoplayerView extends FrameLayout implements
         Activity activity = themedReactContext.getCurrentActivity();
         activity.registerReceiver(pipReceiver, new IntentFilter("onPictureInPictureModeChanged"));
         activity.registerReceiver(leaveReceiver, new IntentFilter("onUserLeaveHint"));
-
-        initializePlayer();
+        
     }
-
 
     @Override
     public void setId(int id) {
@@ -338,15 +376,28 @@ class ReactExoplayerView extends FrameLayout implements
         });
 
         // Invoking onPlayerStateChanged event for Player
-        eventListener = new Player.EventListener() {
+        stateEventListener = new Player.EventListener() {
             @Override
             public void onPlayerStateChanged(boolean playWhenReady, int playbackState) {
                 reLayout(playPauseControlContainer);
                 //Remove this eventListener once its executed. since UI will work fine once after the reLayout is done
-                player.removeListener(eventListener);
+                player.removeListener(stateEventListener);
             }
         };
-        player.addListener(eventListener);
+
+        // Invoking onPlayerStateChanged event for Player
+        seekEventListener = new Player.EventListener() {
+            @Override
+            public void onSeekProcessed() {
+                Timeline currentTimeline = player.getCurrentTimeline();
+                if (!currentTimeline.isEmpty()) {
+                   positionThreshold = currentTimeline.getPeriod(player.getCurrentPeriodIndex(), period)
+                            .getPositionInWindowMs();
+                }
+            }
+        };
+        player.addListener(stateEventListener);
+        player.addListener(seekEventListener);
     }
 
     /**
@@ -378,6 +429,37 @@ class ReactExoplayerView extends FrameLayout implements
         view.layout(view.getLeft(), view.getTop(), view.getMeasuredWidth(), view.getMeasuredHeight());
     }
 
+    private DrmSessionManager<FrameworkMediaCrypto> buildDrmSessionManager(UUID uuid,
+                                                                           String licenseUrl, String[] keyRequestPropertiesArray) throws UnsupportedDrmException {
+        if (Util.SDK_INT < 18) {
+            return null;
+        }
+        HttpMediaDrmCallback drmCallback = new HttpMediaDrmCallback(licenseUrl,
+                buildHttpDataSourceFactory(false));
+        if (keyRequestPropertiesArray != null) {
+            for (int i = 0; i < keyRequestPropertiesArray.length - 1; i += 2) {
+                drmCallback.setKeyRequestProperty(keyRequestPropertiesArray[i],
+                        keyRequestPropertiesArray[i + 1]);
+            }
+        }
+        DefaultDrmSessionManager DDSM =  new DefaultDrmSessionManager<>(uuid, FrameworkMediaDrm.newInstance(uuid), drmCallback, null);
+        DDSM.addListener(mainHandler, this);
+
+        return DDSM;
+    }
+
+    /**
+     * Returns a new HttpDataSource factory.
+     *
+     * @param useBandwidthMeter Whether to set {@link #BANDWIDTH_METER} as a listener to the new
+     *     DataSource factory.
+     * @return A new HttpDataSource factory.
+     */
+    private HttpDataSource.Factory buildHttpDataSourceFactory(boolean useBandwidthMeter) {
+        return new DefaultHttpDataSourceFactory("sctv", useBandwidthMeter ? BANDWIDTH_METER : null);
+    }
+
+
     private void initializePlayer() {
         ReactExoplayerView self = this;
         // This ensures all props have been settled, to avoid async racing conditions.
@@ -388,7 +470,7 @@ class ReactExoplayerView extends FrameLayout implements
                     TrackSelection.Factory videoTrackSelectionFactory = new AdaptiveTrackSelection.Factory();
                     trackSelector = new DefaultTrackSelector(videoTrackSelectionFactory);
                     trackSelector.setParameters(trackSelector.buildUponParameters()
-                            .setMaxVideoBitrate(maxBitRate == 0 ? Integer.MAX_VALUE : maxBitRate));
+                                    .setMaxVideoBitrate(maxBitRate == 0 ? Integer.MAX_VALUE : maxBitRate));
 
                     DefaultAllocator allocator = new DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE);
                     DefaultLoadControl.Builder defaultLoadControlBuilder = new DefaultLoadControl.Builder();
@@ -397,12 +479,21 @@ class ReactExoplayerView extends FrameLayout implements
                     defaultLoadControlBuilder.setTargetBufferBytes(-1);
                     defaultLoadControlBuilder.setPrioritizeTimeOverSizeThresholds(true);
                     DefaultLoadControl defaultLoadControl = defaultLoadControlBuilder.createDefaultLoadControl();
-                    DefaultRenderersFactory renderersFactory =
-                            new DefaultRenderersFactory(getContext())
-                                    .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF);
-                    // TODO: Add drmSessionManager to 5th param from: https://github.com/react-native-community/react-native-video/pull/1445
-                    player = ExoPlayerFactory.newSimpleInstance(getContext(), renderersFactory,
-                            trackSelector, defaultLoadControl, null, bandwidthMeter);
+                    DefaultRenderersFactory renderersFactory = new DefaultRenderersFactory(getContext(), DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF);
+                    DrmSessionManager<FrameworkMediaCrypto> drmSessionManager = null;
+                    if (self.drmUUID != null) {
+                        try {
+                            drmSessionManager = buildDrmSessionManager(self.drmUUID, self.drmLicenseUrl,
+                                    self.drmLicenseHeader);
+                        } catch (UnsupportedDrmException e) {
+                            int errorStringId = Util.SDK_INT < 18 ? R.string.error_drm_not_supported
+                                    : (e.reason == UnsupportedDrmException.REASON_UNSUPPORTED_SCHEME
+                                    ? R.string.error_drm_unsupported_scheme : R.string.error_drm_unknown);
+                            eventEmitter.error(getResources().getString(errorStringId), e);
+                            return;
+                        }
+                    }
+                    player = ExoPlayerFactory.newSimpleInstance(getContext(), renderersFactory, trackSelector, defaultLoadControl, drmSessionManager, BANDWIDTH_METER);
                     player.addListener(self);
                     player.addMetadataOutput(self);
                     exoPlayerView.setPlayer(player);
@@ -410,6 +501,7 @@ class ReactExoplayerView extends FrameLayout implements
                     bandwidthMeter.addEventListener(new Handler(), self);
                     setPlayWhenReady(!isPaused);
                     playerNeedsSource = true;
+                    positionThreshold = 0;
 
                     PlaybackParameters params = new PlaybackParameters(rate, 1f);
                     player.setPlaybackParameters(params);
@@ -443,6 +535,7 @@ class ReactExoplayerView extends FrameLayout implements
                 initializePlayerControl();
                 setControls(controls);
                 applyModifiers();
+                period = new Timeline.Period();
 
                 //Use Media Session Connector from the ExoPlayer library to enable MediaSession Controls in PIP.
                 MediaSessionConnector mediaSessionConnector = new MediaSessionConnector(mediaSession);
@@ -455,32 +548,46 @@ class ReactExoplayerView extends FrameLayout implements
     private MediaSource buildMediaSource(Uri uri, String overrideExtension) {
         int type = Util.inferContentType(!TextUtils.isEmpty(overrideExtension) ? "." + overrideExtension
                 : uri.getLastPathSegment());
+        DataSource.Factory dataSourceFactory = mediaDataSourceFactory;
+        if (offline) {
+            Cache downloadCache = com.twentyfouri.media.offline.ExoPlayerDownloadService.getDownloadCache();
+            if (downloadCache != null) {
+                dataSourceFactory = new CacheDataSourceFactory(
+                        downloadCache,
+                        dataSourceFactory
+                );
+            }
+            MediaSource mediaSource = buildOfflineMediaSource(getDownloadHelper(uri, null), dataSourceFactory, uri);
+            if (mediaSource != null) {
+                return mediaSource;
+            }
+        }
         switch (type) {
             case C.TYPE_SS:
                 return new SsMediaSource.Factory(
-                        new DefaultSsChunkSource.Factory(mediaDataSourceFactory),
-                        buildDataSourceFactory(false)
+                        new DefaultSsChunkSource.Factory(dataSourceFactory),
+                        dataSourceFactory
                 ).setLoadErrorHandlingPolicy(
-                        config.buildLoadErrorHandlingPolicy(minLoadRetryCount)
+                        new DefaultLoadErrorHandlingPolicy(minLoadRetryCount)
                 ).createMediaSource(uri);
             case C.TYPE_DASH:
                 return new DashMediaSource.Factory(
-                        new DefaultDashChunkSource.Factory(mediaDataSourceFactory),
-                        buildDataSourceFactory(false)
+                        new DefaultDashChunkSource.Factory(dataSourceFactory),
+                        dataSourceFactory
                 ).setLoadErrorHandlingPolicy(
-                        config.buildLoadErrorHandlingPolicy(minLoadRetryCount)
+                    new DefaultLoadErrorHandlingPolicy(minLoadRetryCount)
                 ).createMediaSource(uri);
             case C.TYPE_HLS:
                 return new HlsMediaSource.Factory(
-                        mediaDataSourceFactory
+                        dataSourceFactory
                 ).setLoadErrorHandlingPolicy(
-                        config.buildLoadErrorHandlingPolicy(minLoadRetryCount)
+                        new DefaultLoadErrorHandlingPolicy(minLoadRetryCount)
                 ).createMediaSource(uri);
             case C.TYPE_OTHER:
-                return new ProgressiveMediaSource.Factory(
-                        mediaDataSourceFactory
+                return new ExtractorMediaSource.Factory(
+                        dataSourceFactory
                 ).setLoadErrorHandlingPolicy(
-                        config.buildLoadErrorHandlingPolicy(minLoadRetryCount)
+                        new DefaultLoadErrorHandlingPolicy(minLoadRetryCount)
                 ).createMediaSource(uri);
             default: {
                 throw new IllegalStateException("Unsupported type: " + type);
@@ -519,6 +626,7 @@ class ReactExoplayerView extends FrameLayout implements
         if (player != null) {
             updateResumePosition();
             player.release();
+            player.removeListener(seekEventListener);
             player.removeMetadataOutput(this);
             trackSelector = null;
             player = null;
@@ -931,10 +1039,12 @@ class ReactExoplayerView extends FrameLayout implements
     }
 
     public int getTrackRendererIndex(int trackType) {
-        int rendererCount = player.getRendererCount();
-        for (int rendererIndex = 0; rendererIndex < rendererCount; rendererIndex++) {
-            if (player.getRendererType(rendererIndex) == trackType) {
-                return rendererIndex;
+        if (player != null) {
+            int rendererCount = player.getRendererCount();
+            for (int rendererIndex = 0; rendererIndex < rendererCount; rendererIndex++) {
+                if (player.getRendererType(rendererIndex) == trackType) {
+                    return rendererIndex;
+                }
             }
         }
         return C.INDEX_UNSET;
@@ -1185,12 +1295,12 @@ class ReactExoplayerView extends FrameLayout implements
     }
 
     public void setRateModifier(float newRate) {
-      rate = newRate;
+        rate = newRate;
 
-      if (player != null) {
-          PlaybackParameters params = new PlaybackParameters(rate, 1f);
-          player.setPlaybackParameters(params);
-      }
+        if (player != null) {
+            PlaybackParameters params = new PlaybackParameters(rate, 1f);
+            player.setPlaybackParameters(params);
+        }
     }
 
     public void setMaxBitRateModifier(int newMaxBitRate) {
@@ -1249,7 +1359,8 @@ class ReactExoplayerView extends FrameLayout implements
     }
 
     public void setUseTextureView(boolean useTextureView) {
-        exoPlayerView.setUseTextureView(useTextureView);
+        boolean finallyUseTextureView = useTextureView && this.drmUUID == null;
+        exoPlayerView.setUseTextureView(finallyUseTextureView);
     }
 
     public void setHideShutterView(boolean hideShutterView) {
@@ -1263,6 +1374,42 @@ class ReactExoplayerView extends FrameLayout implements
         bufferForPlaybackAfterRebufferMs = newBufferForPlaybackAfterRebufferMs;
         releasePlayer();
         initializePlayer();
+    }
+
+    public void setDrmType(UUID drmType) {
+        this.drmUUID = drmType;
+    }
+
+    public void setDrmLicenseUrl(String licenseUrl){
+        this.drmLicenseUrl = licenseUrl;
+    }
+
+    public void setDrmLicenseHeader(String[] header){
+        this.drmLicenseHeader = header;
+    }
+
+    public void setOffline(Boolean offline) { this.offline = offline; }
+
+
+    @Override
+    public void onDrmKeysLoaded() {
+        Log.d("DRM Info", "onDrmKeysLoaded");
+    }
+
+    @Override
+    public void onDrmSessionManagerError(Exception e) {
+        Log.d("DRM Info", "onDrmSessionManagerError");
+        eventEmitter.error("onDrmSessionManagerError", e);
+    }
+
+    @Override
+    public void onDrmKeysRestored() {
+        Log.d("DRM Info", "onDrmKeysRestored");
+    }
+
+    @Override
+    public void onDrmKeysRemoved() {
+        Log.d("DRM Info", "onDrmKeysRemoved");
     }
 
     /**
@@ -1326,5 +1473,49 @@ class ReactExoplayerView extends FrameLayout implements
 
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode) {
         eventEmitter.pictureInPictureModeChanged(isInPictureInPictureMode);
+    }
+
+    public void setSubtitleForcedMiddle(final boolean forced) {
+        if (exoPlayerView != null) {
+            exoPlayerView.setSubtitleForcedMiddle(forced);
+        }        
+    }
+
+    public void save(ReadableMap options, Promise promise) {
+        promise.resolve("ok");
+    }
+
+    private DownloadHelper getDownloadHelper(Uri uri, String typeOverride) throws IllegalStateException {
+        if (typeOverride != null && typeOverride.isEmpty()) {
+            typeOverride = null;
+        }
+        int type = Util.inferContentType(uri, typeOverride);
+        RenderersFactory renderersFactory =
+                new DefaultRenderersFactory(getContext())
+                        .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF);
+        DataSource.Factory dataSourceFactory = buildDataSourceFactory(false);
+        DownloadHelper downloadHelper;
+        switch (type) {
+            case C.TYPE_DASH:
+                downloadHelper = DownloadHelper.forDash(uri, dataSourceFactory, renderersFactory);
+                break;
+            case C.TYPE_SS:
+                downloadHelper = DownloadHelper.forSmoothStreaming(uri, dataSourceFactory, renderersFactory);
+                break;
+            case C.TYPE_HLS:
+                downloadHelper = DownloadHelper.forHls(uri, dataSourceFactory, renderersFactory);
+                break;
+            case C.TYPE_OTHER:
+                downloadHelper = DownloadHelper.forProgressive(uri);
+                break;
+            default:
+                throw new IllegalStateException("Unsupported type: " + type);
+        }
+        return downloadHelper;
+    }
+
+    private MediaSource buildOfflineMediaSource(DownloadHelper helper, DataSource.Factory dataFactory, Uri uri) {
+        DownloadRequest request = (DownloadRequest)ExoPlayerDownloadService.downloadRequests.get(uri.toString());
+        return helper.createMediaSource(request, dataFactory);
     }
 }
