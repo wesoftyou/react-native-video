@@ -46,6 +46,7 @@ class VideoEventEmitter {
     private static final String EVENT_AUDIO_BECOMING_NOISY = "onVideoAudioBecomingNoisy";
     private static final String EVENT_AUDIO_FOCUS_CHANGE = "onAudioFocusChanged";
     private static final String EVENT_PLAYBACK_RATE_CHANGE = "onPlaybackRateChange";
+    private static final String EVENT_EXTERNAL_PAUSE_TOGGLED = "onExternalPauseToggled";
     private static final String EVENT_PICTURE_IN_PICTURE_STATUS_CHANGED = "onPictureInPictureStatusChanged";
 
     static final String[] Events = {
@@ -69,7 +70,8 @@ class VideoEventEmitter {
             EVENT_AUDIO_FOCUS_CHANGE,
             EVENT_PLAYBACK_RATE_CHANGE,
             EVENT_BANDWIDTH,
-            EVENT_PICTURE_IN_PICTURE_STATUS_CHANGED
+            EVENT_PICTURE_IN_PICTURE_STATUS_CHANGED,
+            EVENT_EXTERNAL_PAUSE_TOGGLED
     };
 
     @Retention(RetentionPolicy.SOURCE)
@@ -94,7 +96,8 @@ class VideoEventEmitter {
             EVENT_AUDIO_FOCUS_CHANGE,
             EVENT_PLAYBACK_RATE_CHANGE,
             EVENT_BANDWIDTH,
-            EVENT_PICTURE_IN_PICTURE_STATUS_CHANGED
+            EVENT_PICTURE_IN_PICTURE_STATUS_CHANGED,
+            EVENT_EXTERNAL_PAUSE_TOGGLED
     })
     @interface VideoEvents {
     }
@@ -122,6 +125,7 @@ class VideoEventEmitter {
     private static final String EVENT_PROP_IS_BUFFERING = "isBuffering";
     private static final String EVENT_PROP_PLAYBACK_RATE = "playbackRate";
     private static final String EVENT_PROP_PICTURE_IN_PICTURE_ACTIVE = "isActive";
+    private static final String EVENT_PROP_IS_PLAYING = "isPlaying";
 
     private static final String EVENT_PROP_ERROR = "error";
     private static final String EVENT_PROP_ERROR_STRING = "errorString";
@@ -195,6 +199,12 @@ class VideoEventEmitter {
 
     void ready() {
         receiveEvent(EVENT_READY, null);
+    }
+
+    void externalPauseToggled(boolean isPlaying) {
+        WritableMap map = Arguments.createMap();
+        map.putBoolean(EVENT_PROP_IS_PLAYING, isPlaying);
+        receiveEvent(EVENT_EXTERNAL_PAUSE_TOGGLED, map);
     }
 
     void buffering(boolean isBuffering) {
