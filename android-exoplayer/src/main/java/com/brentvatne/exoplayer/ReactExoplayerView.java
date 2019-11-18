@@ -60,9 +60,9 @@ import com.google.android.exoplayer2.mediacodec.MediaCodecUtil;
 import com.google.android.exoplayer2.metadata.Metadata;
 import com.google.android.exoplayer2.metadata.MetadataOutput;
 import com.google.android.exoplayer2.source.BehindLiveWindowException;
+import com.google.android.exoplayer2.source.ExtractorMediaSource;
 import com.google.android.exoplayer2.source.MediaSource;
 import com.google.android.exoplayer2.source.MergingMediaSource;
-import com.google.android.exoplayer2.source.ProgressiveMediaSource;
 import com.google.android.exoplayer2.source.SingleSampleMediaSource;
 import com.google.android.exoplayer2.source.TrackGroup;
 import com.google.android.exoplayer2.source.TrackGroupArray;
@@ -112,6 +112,7 @@ class ReactExoplayerView extends FrameLayout implements
 
     private static final String TAG = "ReactExoplayerView";
 
+    private static final DefaultBandwidthMeter BANDWIDTH_METER = new DefaultBandwidthMeter();
     private static final CookieManager DEFAULT_COOKIE_MANAGER;
     private static final int SHOW_PROGRESS = 1;
 
@@ -124,13 +125,10 @@ class ReactExoplayerView extends FrameLayout implements
     private final BroadcastReceiver pipReceiver;
     private final BroadcastReceiver leaveReceiver;
     private final VideoEventEmitter eventEmitter;
-    private final ReactExoplayerConfig config;
-    private final DefaultBandwidthMeter bandwidthMeter;
     private PlayerControlView playerControlView;
     private View playPauseControlContainer;
     private Player.EventListener stateEventListener;
     private Player.EventListener seekEventListener;
-    private Player.EventListener eventListener;
 
     private Handler mainHandler;
     private ExoPlayerView exoPlayerView;
@@ -219,12 +217,10 @@ class ReactExoplayerView extends FrameLayout implements
         }
     };
 
-    public ReactExoplayerView(ThemedReactContext context, ReactExoplayerConfig config) {
+    public ReactExoplayerView(ThemedReactContext context) {
         super(context);
         this.themedReactContext = context;
         this.eventEmitter = new VideoEventEmitter(context);
-        this.config = config;
-        this.bandwidthMeter = config.getBandwidthMeter();
 
         createViews();
 
@@ -254,7 +250,7 @@ class ReactExoplayerView extends FrameLayout implements
         Activity activity = themedReactContext.getCurrentActivity();
         activity.registerReceiver(pipReceiver, new IntentFilter("onPictureInPictureModeChanged"));
         activity.registerReceiver(leaveReceiver, new IntentFilter("onUserLeaveHint"));
-        
+
     }
 
     @Override
@@ -498,7 +494,7 @@ class ReactExoplayerView extends FrameLayout implements
                     player.addMetadataOutput(self);
                     exoPlayerView.setPlayer(player);
                     audioBecomingNoisyReceiver.setListener(self);
-                    bandwidthMeter.addEventListener(new Handler(), self);
+                    BANDWIDTH_METER.addEventListener(new Handler(), self);
                     setPlayWhenReady(!isPaused);
                     playerNeedsSource = true;
                     positionThreshold = 0;
@@ -634,7 +630,7 @@ class ReactExoplayerView extends FrameLayout implements
         progressHandler.removeMessages(SHOW_PROGRESS);
         themedReactContext.removeLifecycleEventListener(this);
         audioBecomingNoisyReceiver.removeListener();
-        bandwidthMeter.removeEventListener(this);
+        BANDWIDTH_METER.removeEventListener(this);
         mediaSession.release();
     }
 
@@ -730,7 +726,7 @@ class ReactExoplayerView extends FrameLayout implements
      */
     private DataSource.Factory buildDataSourceFactory(boolean useBandwidthMeter) {
         return DataSourceUtil.getDefaultDataSourceFactory(this.themedReactContext,
-                useBandwidthMeter ? bandwidthMeter : null, requestHeaders);
+                useBandwidthMeter ? BANDWIDTH_METER : null, requestHeaders);
     }
 
     // AudioManager.OnAudioFocusChangeListener implementation
@@ -1066,7 +1062,7 @@ class ReactExoplayerView extends FrameLayout implements
             this.extension = extension;
             this.requestHeaders = headers;
             this.mediaDataSourceFactory =
-                    DataSourceUtil.getDefaultDataSourceFactory(this.themedReactContext, bandwidthMeter,
+                    DataSourceUtil.getDefaultDataSourceFactory(this.themedReactContext, BANDWIDTH_METER,
                             this.requestHeaders);
 
             if (!isOriginalSourceNull && !isSourceEqual) {
