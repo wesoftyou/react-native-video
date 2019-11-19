@@ -1,6 +1,6 @@
 package com.brentvatne.exoplayer;
 
-import android.support.annotation.StringDef;
+import androidx.annotation.StringDef;
 import android.view.View;
 
 import com.facebook.react.bridge.Arguments;
@@ -107,6 +107,7 @@ class VideoEventEmitter {
     private static final String EVENT_PROP_PLAYABLE_DURATION = "playableDuration";
     private static final String EVENT_PROP_SEEKABLE_DURATION = "seekableDuration";
     private static final String EVENT_PROP_CURRENT_TIME = "currentTime";
+    private static final String EVENT_PROP_FULL_CURRENT_TIME = "fullCurrentTime";
     private static final String EVENT_PROP_SEEK_TIME = "seekTime";
     private static final String EVENT_PROP_NATURAL_SIZE = "naturalSize";
     private static final String EVENT_PROP_WIDTH = "width";
@@ -168,9 +169,10 @@ class VideoEventEmitter {
         receiveEvent(EVENT_LOAD, event);
     }
 
-    void progressChanged(double currentPosition, double bufferedDuration, double seekableDuration) {
+    void progressChanged(double currentPosition, double fullPosition, double bufferedDuration, double seekableDuration) {
         WritableMap event = Arguments.createMap();
         event.putDouble(EVENT_PROP_CURRENT_TIME, currentPosition / 1000D);
+        event.putDouble(EVENT_PROP_FULL_CURRENT_TIME, fullPosition / 1000D);
         event.putDouble(EVENT_PROP_PLAYABLE_DURATION, bufferedDuration / 1000D);
         event.putDouble(EVENT_PROP_SEEKABLE_DURATION, seekableDuration / 1000D);
         receiveEvent(EVENT_PROGRESS, event);

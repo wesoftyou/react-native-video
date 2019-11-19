@@ -2,7 +2,7 @@ package com.brentvatne.exoplayer;
 
 import android.annotation.TargetApi;
 import android.content.Context;
-import android.support.v4.content.ContextCompat;
+import androidx.core.content.ContextCompat;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.Gravity;
@@ -11,6 +11,7 @@ import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.text.Layout;
 
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.ExoPlaybackException;
@@ -25,6 +26,7 @@ import com.google.android.exoplayer2.trackselection.TrackSelectionArray;
 import com.google.android.exoplayer2.ui.SubtitleView;
 
 import java.util.List;
+import java.util.ArrayList;
 
 @TargetApi(16)
 public final class ExoPlayerView extends FrameLayout {
@@ -82,6 +84,12 @@ public final class ExoPlayerView extends FrameLayout {
         layout.addView(subtitleLayout, 2, layoutParams);
 
         addViewInLayout(layout, 0, aspectRatioParams);
+    }
+
+    public void setSubtitleForcedMiddle(final boolean forced) {
+        if (componentListener != null) {
+            componentListener.subtitleForcedMiddle = forced;
+        }        
     }
 
     private void setVideoView() {
@@ -202,10 +210,21 @@ public final class ExoPlayerView extends FrameLayout {
     private final class ComponentListener implements SimpleExoPlayer.VideoListener,
             TextRenderer.Output, ExoPlayer.EventListener {
 
+        public boolean subtitleForcedMiddle = false;
+
         // TextRenderer.Output implementation
 
         @Override
         public void onCues(List<Cue> cues) {
+            if (subtitleForcedMiddle) {
+                List<Cue> copyCues = new ArrayList<>();
+                for (Cue cue : cues) {
+                    Cue copyCue = new Cue(cue.text, Layout.Alignment.ALIGN_CENTER, cue.line, cue.lineType, cue.lineAnchor, 0.5f, Cue.ANCHOR_TYPE_MIDDLE, 0.5f, cue.windowColorSet, cue.windowColor);
+                    copyCues.add(copyCue);
+                }
+                subtitleLayout.onCues(copyCues);
+                return;
+            }
             subtitleLayout.onCues(cues);
         }
 

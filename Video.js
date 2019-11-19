@@ -4,6 +4,7 @@ import {StyleSheet, requireNativeComponent, NativeModules, View, ViewPropTypes, 
 import resolveAssetSource from 'react-native/Libraries/Image/resolveAssetSource';
 import TextTrackType from './TextTrackType';
 import FilterType from './FilterType';
+import DRMType from './DRMType';
 import VideoResizeMode from './VideoResizeMode.js';
 
 const styles = StyleSheet.create({
@@ -12,7 +13,7 @@ const styles = StyleSheet.create({
   },
 });
 
-export { TextTrackType, FilterType };
+export { TextTrackType, FilterType, DRMType };
 
 export default class Video extends Component {
 
@@ -20,7 +21,7 @@ export default class Video extends Component {
     super(props);
 
     this.state = {
-      showPoster: true,
+      showPoster: !!props.poster
     };
   }
 
@@ -74,13 +75,24 @@ export default class Video extends Component {
     this.setNativeProps({ fullscreen: false });
   };
 
-  save = async (options?) => {
-    return await NativeModules.VideoManager.save(options, findNodeHandle(this._root));
+  save = async (options) => {
+    console.log('calling save');
+    return await NativeModules.VideoManager.save(options);
   }
+
+  restoreUserInterfaceForPictureInPictureStopCompleted = (restored) => {
+    this.setNativeProps({ restoreUserInterfaceForPIPStopCompletionHandler: restored });
+  };
 
   _assignRoot = (component) => {
     this._root = component;
   };
+
+  _hidePoster = () => {
+    if (this.state.showPoster) {
+      this.setState({showPoster: false});
+    }
+  }
 
   _onLoadStart = (event) => {
     if (this.props.onLoadStart) {
@@ -89,6 +101,10 @@ export default class Video extends Component {
   };
 
   _onLoad = (event) => {
+    // Need to hide poster here for windows as onReadyForDisplay is not implemented
+    if (Platform.OS === 'windows') {
+      this._hidePoster();
+    }
     if (this.props.onLoad) {
       this.props.onLoad(event.nativeEvent);
     }
@@ -113,10 +129,6 @@ export default class Video extends Component {
   };  
 
   _onSeek = (event) => {
-    if (this.state.showPoster && !this.props.audioOnly) {
-      this.setState({showPoster: false});
-    }
-
     if (this.props.onSeek) {
       this.props.onSeek(event.nativeEvent);
     }
@@ -159,6 +171,7 @@ export default class Video extends Component {
   };
 
   _onReadyForDisplay = (event) => {
+    this._hidePoster();
     if (this.props.onReadyForDisplay) {
       this.props.onReadyForDisplay(event.nativeEvent);
     }
@@ -177,10 +190,6 @@ export default class Video extends Component {
   };
 
   _onPlaybackRateChange = (event) => {
-    if (this.state.showPoster && event.nativeEvent.playbackRate !== 0 && !this.props.audioOnly) {
-      this.setState({showPoster: false});
-    }
-
     if (this.props.onPlaybackRateChange) {
       this.props.onPlaybackRateChange(event.nativeEvent);
     }
@@ -198,6 +207,18 @@ export default class Video extends Component {
     }
   };
 
+  _onPictureInPictureStatusChanged = (event) => {
+    if (this.props.onPictureInPictureStatusChanged) {
+      this.props.onPictureInPictureStatusChanged(event.nativeEvent);
+    }
+  };
+
+  _onRestoreUserInterfaceForPictureInPictureStop = (event) => {
+  	if (this.props.onRestoreUserInterfaceForPictureInPictureStop) {
+      this.props.onRestoreUserInterfaceForPictureInPictureStop();
+    }
+  };
+
   _onAudioFocusChanged = (event) => {
     if (this.props.onAudioFocusChanged) {
       this.props.onAudioFocusChanged(event.nativeEvent);
@@ -210,27 +231,61 @@ export default class Video extends Component {
     }
   };
 
+  _onGetLicense = (event) => {
+    if (this.props.drm && this.props.drm.getLicense instanceof Function) {
+      const data = event.nativeEvent;
+      if (data && data.spc) {
+        const getLicenseOverride = this.props.drm.getLicense(data.spc, this.props);
+        const getLicensePromise = Promise.resolve(getLicenseOverride); // Handles both scenarios, getLicenseOverride being a promise and not.
+        getLicensePromise.then((result => {
+          if (result !== undefined) {
+            NativeModules.VideoManager.setLicenseResult(result, findNodeHandle(this._root));
+          } else {
+            NativeModules.VideoManager.setLicenseError && NativeModules.VideoManager.setLicenseError('Empty license result', findNodeHandle(this._root));
+          }
+        })).catch((error) => {
+          NativeModules.VideoManager.setLicenseError && NativeModules.VideoManager.setLicenseError(error, findNodeHandle(this._root));
+        });
+      } else {
+        NativeModules.VideoManager.setLicenseError && NativeModules.VideoManager.setLicenseError("No spc received", findNodeHandle(this._root));
+      }
+    }
+  }
+  getViewManagerConfig = viewManagerName => {
+    if (!NativeModules.UIManager.getViewManagerConfig) {
+      return NativeModules.UIManager[viewManagerName];
+    }
+    return NativeModules.UIManager.getViewManagerConfig(viewManagerName);
+  };
+
   render() {
     const resizeMode = this.props.resizeMode;
     const source = resolveAssetSource(this.props.source) || {};
+    const shouldCache = !Boolean(source.__packager_asset)
 
     let uri = source.uri || '';
     if (uri && uri.match(/^\//)) {
       uri = `file://${uri}`;
+    }
+    
+    if (!uri) {
+      console.warn('Trying to load empty source.');
     }
 
     const isNetwork = !!(uri && uri.match(/^https?:/));
     const isAsset = !!(uri && uri.match(/^(assets-library|ipod-library|file|content|ms-appx|ms-appdata):/));
 
     let nativeResizeMode;
+    const RCTVideoInstance = this.getViewManagerConfig('RCTVideo');
+
     if (resizeMode === VideoResizeMode.stretch) {
-      nativeResizeMode = NativeModules.UIManager.RCTVideo.Constants.ScaleToFill;
+      nativeResizeMode = RCTVideoInstance.Constants.ScaleToFill;
     } else if (resizeMode === VideoResizeMode.contain) {
-      nativeResizeMode = NativeModules.UIManager.RCTVideo.Constants.ScaleAspectFit;
+      nativeResizeMode = RCTVideoInstance.Constants.ScaleAspectFit;
     } else if (resizeMode === VideoResizeMode.cover) {
-      nativeResizeMode = NativeModules.UIManager.RCTVideo.Constants.ScaleAspectFill;
+      nativeResizeMode = RCTVideoInstance.Constants.ScaleAspectFill;
     } else {
-      nativeResizeMode = NativeModules.UIManager.RCTVideo.Constants.ScaleNone;
+      nativeResizeMode = RCTVideoInstance.Constants.ScaleNone;
     }
 
     const nativeProps = Object.assign({}, this.props);
@@ -241,10 +296,11 @@ export default class Video extends Component {
         uri,
         isNetwork,
         isAsset,
+        shouldCache,
         type: source.type || '',
         mainVer: source.mainVer || 0,
         patchVer: source.patchVer || 0,
-        requestHeaders: source.headers ? this.stringsOnlyObject(source.headers) : {}
+        requestHeaders: source.headers ? this.stringsOnlyObject(source.headers) : {},
       },
       onVideoLoadStart: this._onLoadStart,
       onVideoLoad: this._onLoad,
@@ -267,6 +323,9 @@ export default class Video extends Component {
       onPlaybackRateChange: this._onPlaybackRateChange,
       onAudioFocusChanged: this._onAudioFocusChanged,
       onAudioBecomingNoisy: this._onAudioBecomingNoisy,
+      onGetLicense: nativeProps.drm && nativeProps.drm.getLicense && this._onGetLicense,
+      onPictureInPictureStatusChanged: this._onPictureInPictureStatusChanged,
+      onRestoreUserInterfaceForPictureInPictureStop: this._onRestoreUserInterfaceForPictureInPictureStop,
     });
 
     const posterStyle = {
@@ -275,15 +334,16 @@ export default class Video extends Component {
     };
 
     return (
-      <React.Fragment>
-        <RCTVideo ref={this._assignRoot} {...nativeProps} />
-        {this.props.poster &&
-          this.state.showPoster && (
-            <View style={nativeProps.style}>
-              <Image style={posterStyle} source={{ uri: this.props.poster }} />
-            </View>
-          )}
-      </React.Fragment>
+      <View style={nativeProps.style}>
+        <RCTVideo
+          ref={this._assignRoot}
+          {...nativeProps}
+          style={StyleSheet.absoluteFill}
+        />
+        {this.state.showPoster && (
+          <Image style={posterStyle} source={{ uri: this.props.poster }} />
+        )}
+      </View>
     );
   }
 }
@@ -334,11 +394,22 @@ Video.propTypes = {
   /* Wrapper component */
   source: PropTypes.oneOfType([
     PropTypes.shape({
-      uri: PropTypes.string
+      uri: PropTypes.string,
     }),
     // Opaque type returned by require('./video.mp4')
     PropTypes.number
   ]),
+  drm: PropTypes.shape({
+    type: PropTypes.oneOf([
+      DRMType.CLEARKEY, DRMType.FAIRPLAY, DRMType.WIDEVINE, DRMType.PLAYREADY
+    ]),
+    licenseServer: PropTypes.string,
+    headers: PropTypes.shape({}),
+    base64Certificate: PropTypes.bool,
+    certificateUrl: PropTypes.string,
+    getLicense: PropTypes.func,
+  }),
+  minLoadRetryCount: PropTypes.number,
   maxBitRate: PropTypes.number,
   resizeMode: PropTypes.string,
   poster: PropTypes.string,
@@ -389,6 +460,7 @@ Video.propTypes = {
   }),
   stereoPan: PropTypes.number,
   rate: PropTypes.number,
+  pictureInPicture: PropTypes.bool,
   playInBackground: PropTypes.bool,
   playWhenInactive: PropTypes.bool,
   ignoreSilentSwitch: PropTypes.oneOf(['ignore', 'obey']),
@@ -420,6 +492,8 @@ Video.propTypes = {
   onPlaybackRateChange: PropTypes.func,
   onAudioFocusChanged: PropTypes.func,
   onAudioBecomingNoisy: PropTypes.func,
+  onPictureInPictureStatusChanged: PropTypes.func,
+  needsToRestoreUserInterfaceForPictureInPictureStop: PropTypes.func,
   onExternalPlaybackChange: PropTypes.func,
 
   /* Required by react-native */
