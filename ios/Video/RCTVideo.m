@@ -35,6 +35,7 @@ static int const RCTVideoUnset = -1;
   NSURL *_videoURL;
   BOOL _requestingCertificate;
   BOOL _requestingCertificateErrored;
+  BOOL _pendingFullScreenRequest;
   
   /* DRM */
   NSDictionary *_drm;
@@ -114,6 +115,7 @@ static int const RCTVideoUnset = -1;
     _playWhenInactive = false;
     _pictureInPicture = false;
     _ignoreSilentSwitch = @"inherit"; // inherit, ignore, obey
+    _pendingFullScreenRequest = false;
 #if TARGET_OS_IOS
     _restoreUserInterfaceForPIPStopCompletionHandler = NULL;
 #endif
@@ -395,7 +397,12 @@ static int const RCTVideoUnset = -1;
       if (@available(iOS 10.0, *)) {
         [self setAutomaticallyWaitsToMinimizeStalling:_automaticallyWaitsToMinimizeStalling];
       }
-
+      
+      if(_pendingFullScreenRequest) {
+        [self setFullscreen:YES];
+        _pendingFullScreenRequest = false;
+      }
+      
       //Perform on next run loop, otherwise onVideoLoadStart is nil
       if (self.onVideoLoadStart) {
         id uri = [self->_source objectForKey:@"uri"];
@@ -1280,13 +1287,20 @@ static int const RCTVideoUnset = -1;
 }
 
 - (void)setFullscreen:(BOOL) fullscreen {
-  if( fullscreen && !_fullscreenPlayerPresented && _player )
+  if( fullscreen && !_fullscreenPlayerPresented )
   {
+    // Ensure player is initialized before trying to fullscreen it
+    if(!_player)
+    {
+      _pendingFullScreenRequest = true;
+      return;
+    }
     // Ensure player view controller is not null
     if( !_playerViewController )
     {
       [self usePlayerViewController];
     }
+    
     // Set presentation style to fullscreen
     [_playerViewController setModalPresentationStyle:UIModalPresentationFullScreen];
     
@@ -1307,21 +1321,29 @@ static int const RCTVideoUnset = -1;
       if(self.onVideoFullscreenPlayerWillPresent) {
         self.onVideoFullscreenPlayerWillPresent(@{@"target": self.reactTag});
       }
-      [viewController presentViewController:_playerViewController animated:true completion:^{
-        _playerViewController.showsPlaybackControls = YES;
-        _fullscreenPlayerPresented = fullscreen;
-        _playerViewController.autorotate = _fullscreenAutorotate;
-        if(self.onVideoFullscreenPlayerDidPresent) {
-          self.onVideoFullscreenPlayerDidPresent(@{@"target": self.reactTag});
-        }
-      }];
+      [_playerViewController.view setFrame:[UIScreen mainScreen].bounds];
+      [_playerViewController removeFromParentViewController];
+      [_playerViewController.view removeFromSuperview];
+      [_playerViewController.view setNeedsLayout];
+      if(!_playerViewController.isBeingPresented) {
+        [viewController presentViewController:_playerViewController animated:true completion:^{
+          
+          [self->_playerViewController.view setFrame:[UIScreen mainScreen].bounds];
+          self->_playerViewController.showsPlaybackControls = YES;
+          self->_fullscreenPlayerPresented = fullscreen;
+          self->_playerViewController.autorotate = self->_fullscreenAutorotate;
+          if(self.onVideoFullscreenPlayerDidPresent) {
+            self.onVideoFullscreenPlayerDidPresent(@{@"target": self.reactTag});
+          }
+        }];
+      }
     }
   }
   else if ( !fullscreen && _fullscreenPlayerPresented )
   {
     [self videoPlayerViewControllerWillDismiss:_playerViewController];
     [_presentingViewController dismissViewControllerAnimated:true completion:^{
-      [self videoPlayerViewControllerDidDismiss:_playerViewController];
+      [self videoPlayerViewControllerDidDismiss:self->_playerViewController];
     }];
   }
 }
