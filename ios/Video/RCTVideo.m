@@ -369,6 +369,9 @@ static int const RCTVideoUnset = -1;
       [self setMaxBitRate:self->_maxBitRate];
       
       [_player pause];
+      [_playerViewController.view removeFromSuperview];
+      [_playerViewController removeFromParentViewController];
+      _playerViewController = nil;
         
       if (_playbackRateObserverRegistered) {
         [_player removeObserver:self forKeyPath:playbackRate context:nil];
@@ -1395,6 +1398,7 @@ static int const RCTVideoUnset = -1;
     else
     {
       [_playerViewController.view removeFromSuperview];
+      [_playerViewController removeFromParentViewController];
       _playerViewController = nil;
       [self usePlayerLayer];
     }
@@ -1543,6 +1547,7 @@ static int const RCTVideoUnset = -1;
 - (void)removeFromSuperview
 {
   [_player pause];
+  [self setFullscreen:NO];
   if (_playbackRateObserverRegistered) {
     [_player removeObserver:self forKeyPath:playbackRate context:nil];
     _playbackRateObserverRegistered = NO;
@@ -1558,6 +1563,7 @@ static int const RCTVideoUnset = -1;
   [_playerViewController.contentOverlayView removeObserver:self forKeyPath:@"frame"];
   [_playerViewController removeObserver:self forKeyPath:readyForDisplayKeyPath];
   [_playerViewController.view removeFromSuperview];
+  [_playerViewController removeFromParentViewController];
   _playerViewController.rctDelegate = nil;
   _playerViewController.player = nil;
   _playerViewController = nil;
