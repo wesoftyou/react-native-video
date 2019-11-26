@@ -33,9 +33,6 @@ static int const RCTVideoUnset = -1;
   BOOL _playerLayerObserverSet;
   RCTVideoPlayerViewController *_playerViewController;
   NSURL *_videoURL;
-<<<<<<< HEAD
-  BOOL _pendingFullScreenRequest;
-=======
   BOOL _requestingCertificate;
   BOOL _requestingCertificateErrored;
   BOOL _pendingFullScreenRequest;
@@ -43,7 +40,6 @@ static int const RCTVideoUnset = -1;
   /* DRM */
   NSDictionary *_drm;
   AVAssetResourceLoadingRequest *_loadingRequest;
->>>>>>> feature/offline-playback-android-x
   
   /* Required to publish events */
   RCTEventDispatcher *_eventDispatcher;
@@ -511,15 +507,11 @@ static int const RCTVideoUnset = -1;
   NSString *uri = [source objectForKey:@"uri"];
   NSString *type = [source objectForKey:@"type"];
   AVURLAsset *asset;
-<<<<<<< HEAD
-
-=======
   if (!uri || [uri isEqualToString:@""]) {
     DebugLog(@"Could not find video URL in source '%@'", source);
     return;
   }
   
->>>>>>> feature/offline-playback-android-x
   NSURL *url = isNetwork || isAsset
     ? [NSURL URLWithString:uri]
     : [[NSURL alloc] initFileURLWithPath:[[NSBundle mainBundle] pathForResource:uri ofType:type]];
@@ -547,19 +539,11 @@ static int const RCTVideoUnset = -1;
       return;
     }
 #endif
-<<<<<<< HEAD
-
-=======
     
->>>>>>> feature/offline-playback-android-x
     asset = [AVURLAsset URLAssetWithURL:url options:assetOptions];
   } else if (isAsset) {
     asset = [AVURLAsset URLAssetWithURL:url options:nil];
   } else {
-<<<<<<< HEAD
-      asset = [AVURLAsset URLAssetWithURL:[[NSURL alloc] initFileURLWithPath:[[NSBundle mainBundle] pathForResource:uri ofType:type]] options:nil];
-  }
-=======
     asset = [AVURLAsset URLAssetWithURL:[[NSURL alloc] initFileURLWithPath:[[NSBundle mainBundle] pathForResource:uri ofType:type]] options:nil];
   }
   // Reset
@@ -574,7 +558,6 @@ static int const RCTVideoUnset = -1;
     [asset.resourceLoader setDelegate:self queue:queue];
   }
   
->>>>>>> feature/offline-playback-android-x
   [self playerItemPrepareText:asset assetOptions:assetOptions withCallback:handler];
 }
 
