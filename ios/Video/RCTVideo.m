@@ -1494,7 +1494,7 @@ static int const RCTVideoUnset = -1;
   
   [self removePlayerLayer];
   
-  try {
+  @try {
     [_playerViewController.contentOverlayView removeObserver:self forKeyPath:@"frame"];
     [_playerViewController removeObserver:self forKeyPath:readyForDisplayKeyPath];
   }@catch(id anException){
