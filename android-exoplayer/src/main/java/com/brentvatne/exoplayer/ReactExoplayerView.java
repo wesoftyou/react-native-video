@@ -354,6 +354,8 @@ class ReactExoplayerView extends FrameLayout implements
             player.setPlaybackParameters(params);
         }
         if (playerNeedsSource && srcUri != null) {
+            exoPlayerView.invalidateAspectRatio();
+                
             ArrayList<MediaSource> mediaSourceList = buildTextSources();
             MediaSource videoSource = buildMediaSource(srcUri, extension);
             MediaSource mediaSource;
